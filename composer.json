@@ -1,6 +1,5 @@
 {
     "name": "venditan/appengine-deploy",
-    "type": "application",
     "description": "Environment and Deployment Manager for Google App Engine Applications",
     "keywords": ["app engine","deploy","venditan"],
     "homepage": "https://github.com/Venditan/appengine-deploy",
