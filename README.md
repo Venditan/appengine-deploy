@@ -14,7 +14,7 @@ This tool uses `appcfg.py` to actually push the deployments out, but it builds a
 
 ### Example deploy.json file ###
 
-Deployment targets and environments are configured in `deploy.json`.
+Deployment targets and environments are configured in `deploy.json`, usually in your project root.
 
 Here's a quick example where we have different database credentials for alpha and live environments.
 
@@ -43,12 +43,26 @@ Here's a quick example where we have different database credentials for alpha an
 }
 ```
 
-## Examples ##
+### Local development environment ###
+
+You can configure the environment variables for your local development server in your yaml files like this:
+
+```yaml
+env_variables:
+  APP_DB_USER: root
+  APP_DB_NAME: localdb
+```
+
+## Usage ##
+
+Deployment targets configured in `deploy.json` are executed using the `deploy` command, which is made available the `vendor/bin` folder by Composer.
+
+For example, from your project root:
 
 Deploy the **examples** module to the **alpha** target environment
 
 ```bash
-vendor/bin/deploy examples:alpha
+vendor/bin/deploy run examples:alpha
 ```
 
 Create a template **deploy.json** file
@@ -57,39 +71,21 @@ Create a template **deploy.json** file
 vendor/bin/deploy init
 ```
 
-## Usage ##
-
-Deployment targets and environments are configured in `deploy.json` and executed using the `deploy` command, which is made available the `vendor/bin` folder by Composer.
-
-For example, from your project root:
+Show the planned `appcfg.py` command for a deployment, but do not run it
 
 ```bash
-vendor/bin/deploy run default:live
+vendor/bin/deploy test default:live
 ```
 
-```bash
-deploy [verbose] init
-```
+List the configured deployment targets
 
 ```bash
-deploy [verbose] targets
-```
-
-```bash
-deploy [verbose] test module:target
-```
-
-```bash
-deploy [verbose] run module:target
+vendor/bin/deploy [verbose] targets
 ```
 
 ### Default Module ###
 
 You can use either `app` or `default` to deploy the default App Engine module (which is configured in your `app.yaml` file).
-
-## deploy.json ##
-
-You should create `deploy.json` in your project root (you can use the `deploy init` command to create a template file).
 
 ### Targets ###
 
@@ -105,7 +101,7 @@ In the example above, the first deployment gets `alpha1` and the second `alpha2`
 
 In order to do this, we have to be able to detect what versions are already running. So, if you delete all your versions, we will start at 1 again.
 
-### Code Separation, Redirects ###
+## Code Separation, Redirects ##
 
 You can "redirect" from your `deploy.json` file to another, usually intended for situations where your environment configurations are stored in another version control repository.
 
@@ -117,7 +113,7 @@ So, this might be your deploy file from your application folder:
 }
 ```
 
-## Installing this library ##
+## Installing this tool ##
 
 In your composer.json require section:
 
@@ -125,3 +121,8 @@ In your composer.json require section:
 "venditan/appengine-deploy": "dev-master"
 ```
 
+or with the command line
+
+```bash
+composer require venditan/appengine-deploy
+```
