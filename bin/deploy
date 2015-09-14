@@ -1,0 +1,525 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Copyright 2015 Venditan Limited
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+namespace Venditan;
+
+/**
+ * App Engine Deploy
+ *
+ * Deployment wrapper for App Engine
+ *
+ * Installed by Composer as vendor/bin/deploy
+ *
+ * @author Tom Walder
+ */
+class AppEngineDeploy
+{
+
+    /**
+     * Verbose logging?
+     *
+     * @var bool
+     */
+    private $bol_verbose = false;
+
+    /**
+     * Configuration object (from JSON deployment file)
+     *
+     * @var object
+     */
+    private $obj_config = null;
+
+    /**
+     * Module name
+     *
+     * @var string
+     */
+    private $str_module = null;
+
+    /**
+     * Version name
+     *
+     * @var string
+     */
+    private $str_version = null;
+
+    /**
+     * Requested deployment target
+     *
+     * @var string
+     */
+    private $str_target = null;
+
+    /**
+     * Environment variables for deployment target
+     *
+     * @var array
+     */
+    private $arr_env = [];
+
+    /**
+     * Script arguments
+     *
+     * @var array
+     */
+    private $arr_args = [];
+
+    /**
+     * Run the deployment
+     */
+    public function run()
+    {
+        $this->arr_args = (array)$_SERVER['argv'];
+        try {
+            $this->say('');
+            $str_command = $this->evaluateCommand();
+            switch($str_command) {
+                case 'init':
+                    $this->initRequest();
+                    break;
+
+                case 'targets':
+                    $this->targetsRequest();
+                    break;
+
+                case 'test':
+                case 'run':
+                    $this->prepareDeploy('run' === $str_command);
+                    break;
+
+                default:
+                    throw new \InvalidArgumentException("Unknown command: {$str_command}");
+            }
+            $this->say("Complete");
+        } catch (\InvalidArgumentException $obj_ex) {
+            $this->say("Expected usage:");
+            $this->say("  deploy [verbose] init");
+            $this->say("  deploy [verbose] targets");
+            $this->say("  deploy [verbose] test module:target");
+            $this->say("  deploy [verbose] run module:target");
+            $this->say($this->coloured(' FAILED ', 'black', 'red') . ' ' .$obj_ex->getMessage(), true);
+        } catch (\Exception $obj_ex) {
+            $this->say($this->coloured(' FAILED ', 'black', 'red') . ' ' .$obj_ex->getMessage(), true);
+        }
+    }
+
+    /**
+     * Prepare a deployment, and optionally execute
+     *
+     * @param bool|false $bol_execute
+     */
+    private function prepareDeploy($bol_execute = false)
+    {
+        $this->loadConfig();
+        $this->validateConfig();
+        $this->validateAppcfg();
+        $this->determineModuleTarget();
+        $this->validateModuleTarget();
+        $this->determineVersion();
+        $this->loadTargetEnvironment();
+
+        // Build the deploy command
+        $str_cmd = $this->buildDeployCommand();
+        $this->say($this->coloured(' COMMAND ', 'white', 'blue') . ' ' . $str_cmd, true);
+
+        // Optionally do the deployment (run the command)
+        $bol_execute && $this->deploy($str_cmd);
+    }
+
+    /**
+     * Evaluate the command line
+     */
+    private function evaluateCommand()
+    {
+        $arr_cmd_match = [];
+        $bol_valid = preg_match('#(.*?)(\s(?<verbose>verbose))?\s(?<cmd>.*?)(\s(?<param>.*))?$#', implode(' ', $this->arr_args), $arr_cmd_match);
+        if(!$bol_valid) {
+            throw new \InvalidArgumentException("Invalid command");
+        }
+        if(isset($arr_cmd_match['verbose']) && 'verbose' == $arr_cmd_match['verbose']) {
+            $this->bol_verbose = true;
+            $this->verbose('Verbose output enabled');
+        }
+        return $arr_cmd_match['cmd'];
+    }
+
+    /**
+     * One day allow optional configuration of where appcfg.py is
+     *
+     * @return string
+     */
+    private function getAppcfgPath()
+    {
+        return 'appcfg.py';
+    }
+
+    /**
+     * Future-proofing for user-supplied config file location
+     *
+     * @return string
+     */
+    private function getConfigFilename()
+    {
+        return $this->getBaseDir() . '/deploy.json';
+    }
+
+    /**
+     * Get the working folder
+     *
+     * @return string
+     */
+    private function getBaseDir()
+    {
+        return $_SERVER['PWD'];
+    }
+
+    /**
+     * Ensure we can talk to appcfg.py
+     */
+    private function validateAppcfg()
+    {
+        $this->verbose("Checking appcfg.py");
+        $str_help_output = shell_exec($this->getAppcfgPath() . ' help update 2>&1');
+        if(false === strpos($str_help_output, '-A APP_ID')) {
+            throw new \RuntimeException("Could not validate 'appcfg.py' - is it in your PATH?");
+        }
+        $this->verbose("  appcfg.py OK");
+    }
+
+    /**
+     * Load the deploy config, with one "redirect" file allowed
+     */
+    private function loadConfig()
+    {
+        $this->verbose("Loading configuration");
+        $obj_initial_config = $this->loadConfigFile($this->getConfigFilename());
+        if(isset($obj_initial_config->file)) {
+            $this->verbose("  File redirect: {$obj_initial_config->file}");
+            $this->obj_config = $this->loadConfigFile($obj_initial_config->file);
+        } else {
+            $this->obj_config = $obj_initial_config;
+        }
+    }
+
+    /**
+     * Load a deploy config file
+     *
+     * @param $str_file
+     * @return mixed
+     */
+    private function loadConfigFile($str_file)
+    {
+        $this->verbose("  Looking for config file: {$str_file}");
+        if(!file_exists($str_file)) {
+            throw new \RuntimeException("Deployment configuration file not found ({$str_file}). Perhaps you need to create one.");
+        }
+        $this->verbose("  File found, trying JSON decode");
+        $obj_config = json_decode(file_get_contents($str_file));
+        if(!is_object($obj_config)) {
+            throw new \RuntimeException("Could not load valid JSON config from file");
+        }
+        $this->verbose("  JSON decoded config file OK");
+        return $obj_config;
+    }
+
+    /**
+     * Validate the loaded config
+     */
+    private function validateConfig()
+    {
+        $this->verbose("Validating configuration");
+        if(!isset($this->obj_config->targets)) {
+            throw new \RuntimeException("No deployment targets defined.");
+        }
+        $int_targets = 0;
+        foreach($this->obj_config->targets as $str_target => $obj_target) {
+            $this->verbose("  Found target: {$str_target}");
+            if(!isset($obj_target->app_id)) {
+                throw new \RuntimeException("No app_id defined for deployment target: {$str_target}");
+            }
+            $int_targets++;
+        }
+        if($int_targets < 1) {
+            throw new \RuntimeException("No valid deployment targets defined.");
+        }
+        $this->verbose("  Configuration seems valid");
+    }
+
+    /**
+     * List the configured targets
+     *
+     * @return bool
+     */
+    private function targetsRequest()
+    {
+        $this->loadConfig();
+        $this->validateConfig();
+        $this->say("Configured targets:");
+        $int_targets = 0;
+        foreach($this->obj_config->targets as $str_target => $obj_target) {
+            $this->say("  {$str_target} -> {$obj_target->app_id}");
+            $int_targets++;
+        }
+        $this->say($this->coloured(' DONE ', 'white', 'blue') . " {$int_targets} target" . (1 == $int_targets ? '' : 's') . " found", true);
+    }
+
+    /**
+     * Is this an init request?
+     *
+     * If so, process and return true
+     *
+     * @return bool
+     */
+    private function initRequest()
+    {
+        $this->verbose("Running init");
+        if(file_exists($this->getConfigFilename())) {
+            throw new \RuntimeException("Deployment configuration file already exists (deploy.json).");
+        }
+
+        // Determine app ID if possible
+        $this->verbose("  Attempting to determine app_id from app.yaml");
+        $arr_match = [];
+        preg_match('#application:(\s+)?(?<app>.*)#', @file_get_contents($this->getBaseDir() . '/app.yaml'), $arr_match);
+        $str_app = isset($arr_match['app']) ? $arr_match['app'] : 'your-app-id';
+
+        // Config object
+        $obj_cfg = (object)[
+            "targets" => (object)[
+                "example" => (object)[
+                    "app_id" => $str_app,
+                    "version" => "version++",
+                    "environment" => (object)[
+                        "EXAMPLE" => "VALUE"
+                    ]
+                ]
+            ]
+        ];
+
+        // Write file
+        $this->verbose("  Writing deploy.json");
+        $int_written = file_put_contents($this->getConfigFilename(), json_encode($obj_cfg, JSON_PRETTY_PRINT));
+        $this->say($this->coloured(' INIT OK ', 'white', 'blue') . ' ' . $int_written . ' bytes written to ' . $this->getConfigFilename(), true);
+    }
+
+    /**
+     * Which module? (e.g. app.yaml)
+     * Where to? (which target environment - alpha/beta/staging/live) - consider JSON config
+     */
+    private function determineModuleTarget()
+    {
+        foreach($this->arr_args as $str_arg) {
+            if(strpos($str_arg, ':')) {
+                $arr_cmd = explode(':', $str_arg);
+                if(2 == count($arr_cmd)) {
+                    $this->str_module = $arr_cmd[0];
+                    $this->str_target = $arr_cmd[1];
+                    if('default' === $this->str_module) {
+                        $this->str_module = 'app';
+                    }
+                    $this->verbose("Deployment requested for [{$this->str_module}:{$this->str_target}]");
+                    return;
+                }
+            }
+        }
+        throw new \RuntimeException("Could not determine module:target. Expected usage: 'deploy <module>:<target>'");
+    }
+
+    /**
+     * Validate the module and target supplied
+     */
+    private function validateModuleTarget()
+    {
+        $str_module_filename = $this->getBaseDir() . '/' . $this->str_module . '.yaml';
+        if(!file_exists($str_module_filename)) {
+            throw new RuntimeException("Could not validate module '{$this->str_module}' - missing yaml file?");
+        }
+        if(!isset($this->obj_config->targets->{$this->str_target})) {
+            throw new RuntimeException("Requested deployment target '{$this->str_target}' not present in config");
+        }
+        $this->verbose("Deployment request valid");
+    }
+
+    /**
+     * Ensure we only have one way to get the target config - in case we change the JSON format
+     *
+     * @return object
+     */
+    private function getTargetConfig()
+    {
+        return $this->obj_config->targets->{$this->str_target};
+    }
+
+    /**
+     * Load environment variables for the target
+     *
+     * @todo consider loading environment from central place
+     */
+    private function loadTargetEnvironment()
+    {
+        $obj_target = $this->getTargetConfig();
+        if(isset($obj_target->environment)) {
+            foreach($obj_target->environment as $str_key => $str_val) {
+                $this->arr_env[$str_key] = $str_val;
+            }
+        } elseif (isset($obj_target->environment_from)) {
+            throw new RuntimeException("Remote environment not supported (yet)");
+        } else {
+            throw new RuntimeException("No environment defined for target");
+        }
+        // @todo cache environment in git-ignored file .deploy-cache
+    }
+
+    /**
+     * Determine what version to deploy to
+     */
+    private function determineVersion()
+    {
+        $obj_target = $this->getTargetConfig();
+
+        // Currently deployed versions
+        $this->say('Looking up deployed versions...');
+        $arr_deployed_versions = [];
+        $str_version_cmd = $this->getAppcfgPath() . " -A {$obj_target->app_id} list_versions 2>&1";
+        $this->verbose("Running version check: {$str_version_cmd}");
+        $str_version_data = shell_exec($str_version_cmd);
+        $arr_modules = explode("\n", $str_version_data);
+        foreach($arr_modules as $str_module_version_data) {
+            $arr_module_versions = [];
+            $bol_match = preg_match('#(?<module>.*): \[(?<versions>.*)\]#', $str_module_version_data, $arr_module_versions);
+            if($bol_match) {
+                $str_module = $arr_module_versions['module'];
+                $arr_deployed_versions = explode(', ', $arr_module_versions['versions']);
+                $this->verbose("Module [{$str_module}] has deployed Versions [" . implode('+', $arr_deployed_versions) . "]");
+                if($str_module === $this->str_module) {
+                    $this->say("Target module [{$str_module}] has existing deployed versions [" . implode(', ', $arr_deployed_versions) . "]");
+                    break;
+                }
+            }
+        }
+
+        // Requested version
+        $str_version_template = isset($obj_target->version) ? $obj_target->version : 'deploy++';
+        $arr_version_template = [];
+        if(preg_match('#(?<prefix>.*)\+\+$#', $str_version_template, $arr_version_template)) {
+
+            // Version template implies incremental
+            $str_version_prefix = $arr_version_template['prefix'];
+            $int_previous_version = 0;
+            foreach($arr_deployed_versions as $str_deployed_version) {
+                $arr_matched_version = [];
+                if(preg_match("#alpha(?<number>[0-9]+)$#", $str_deployed_version, $arr_matched_version)) {
+                    if($arr_matched_version['number'] > $int_previous_version) {
+                        $int_previous_version = $arr_matched_version['number'];
+                    }
+                }
+            }
+
+            // Increment the version by one
+            $this->str_version = $str_version_prefix . ($int_previous_version + 1);
+        } else {
+
+            // Non-incremental version, so just warn the user if this version is already deployed
+            if(in_array($str_version_template, $arr_deployed_versions)) {
+                $this->say($this->coloured(' WARNING ', 'black', 'yellow') . ' replacing already deployed version', true);
+            }
+            $this->str_version = $str_version_template;
+        }
+        $this->say("Deploying to version: {$this->str_version}");
+    }
+
+    /**
+     * Build the deploy command
+     *
+     * @return string
+     */
+    private function buildDeployCommand()
+    {
+        $obj_target = $this->getTargetConfig();
+        $arr_cmd = [
+            $this->getAppcfgPath(),
+            'update',
+            "{$this->str_module}.yaml",
+            "-A {$obj_target->app_id}",
+            "-V {$this->str_version}"
+        ];
+        foreach($this->arr_env as $str_key => $str_val) {
+            $arr_cmd[] = "-E {$str_key}:\"{$str_val}\"";
+        }
+        return implode(' ', $arr_cmd);
+    }
+
+    /**
+     * Do it!
+     *
+     * Optionally run appcfg.py ...
+     *
+     * @todo Probably need a prompt or -y type flag
+     * @todo Consider logging of deployments
+     *
+     * @param $str_cmd
+     */
+    private function deploy($str_cmd)
+    {
+        passthru($str_cmd);
+    }
+
+    /**
+     * Output some data to the terminal
+     *
+     * @param $str
+     * @param bool|false $bol_wrap
+     */
+    private function say($str, $bol_wrap = false)
+    {
+        echo ($bol_wrap ? PHP_EOL : null), $str, PHP_EOL, ($bol_wrap ? PHP_EOL : null);
+    }
+
+    /**
+     * Output some data, but only if we are in 'verbose' mode
+     *
+     * @param $str
+     */
+    private function verbose($str)
+    {
+        if($this->bol_verbose) {
+            $this->say($str);
+        }
+    }
+
+    /**
+     * Construct a terminal coloured string
+     *
+     * @param $str
+     * @param string $str_fg_colour
+     * @param string $str_bg_colour
+     * @return string
+     */
+    private function coloured($str, $str_fg_colour = 'red', $str_bg_colour = 'black') {
+        $arr_colours = ['black' => '0', 'red' => '1', 'green' => '2', 'yellow' => '3', 'blue' => '4', 'magenta' => '5', 'cyan' => '6', 'white' => '7'];
+        $str_bg_start = '[4' . (isset($arr_colours[$str_bg_colour]) ? $arr_colours[$str_bg_colour] : '1') . 'm';
+        $str_fg_start = '[3' . (isset($arr_colours[$str_fg_colour]) ? $arr_colours[$str_fg_colour] : '1') . 'm';
+        return chr(27) . $str_bg_start . chr(27) . $str_fg_start . $str . chr(27) . '[0m';
+    }
+
+}
+
+(new AppEngineDeploy)->run();
+
+
+
