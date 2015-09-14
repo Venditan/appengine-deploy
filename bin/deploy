@@ -320,6 +320,8 @@ class AppEngineDeploy
     /**
      * Which module? (e.g. app.yaml)
      * Where to? (which target environment - alpha/beta/staging/live) - consider JSON config
+     *
+     * @todo Update & use the regex in evaluateCommand() to extract module and target
      */
     private function determineModuleTarget()
     {
@@ -368,7 +370,7 @@ class AppEngineDeploy
     /**
      * Load environment variables for the target
      *
-     * @todo consider loading environment from central place
+     * @todo Consider loading environment from central place, URL, etc.
      */
     private function loadTargetEnvironment()
     {
@@ -382,7 +384,6 @@ class AppEngineDeploy
         } else {
             throw new \RuntimeException("No environment defined for target");
         }
-        // @todo cache environment in git-ignored file .deploy-cache
     }
 
     /**
@@ -396,7 +397,7 @@ class AppEngineDeploy
         $this->say('Looking up deployed versions...');
         $arr_deployed_versions = [];
         $str_version_cmd = $this->getAppcfgPath() . " -A {$obj_target->app_id} list_versions 2>&1";
-        $this->verbose("Running version check: {$str_version_cmd}");
+        $this->verbose("  Running version check command: {$str_version_cmd}");
         $str_version_data = shell_exec($str_version_cmd);
         $arr_modules = explode("\n", $str_version_data);
         foreach($arr_modules as $str_module_version_data) {
@@ -405,9 +406,9 @@ class AppEngineDeploy
             if($bol_match) {
                 $str_module = $arr_module_versions['module'];
                 $arr_deployed_versions = explode(', ', $arr_module_versions['versions']);
-                $this->verbose("Module [{$str_module}] has deployed Versions [" . implode('+', $arr_deployed_versions) . "]");
+                $this->verbose("  Module [{$str_module}] has deployed Versions [" . implode(', ', $arr_deployed_versions) . "]");
                 if($str_module === $this->str_module) {
-                    $this->say("Target module [{$str_module}] has existing deployed versions [" . implode(', ', $arr_deployed_versions) . "]");
+                    $this->say("  Target module [{$str_module}] has existing deployed versions [" . implode(', ', $arr_deployed_versions) . "]");
                     break;
                 }
             }
