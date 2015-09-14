@@ -347,10 +347,10 @@ class AppEngineDeploy
     {
         $str_module_filename = $this->getBaseDir() . '/' . $this->str_module . '.yaml';
         if(!file_exists($str_module_filename)) {
-            throw new RuntimeException("Could not validate module '{$this->str_module}' - missing yaml file?");
+            throw new \RuntimeException("Could not validate module '{$this->str_module}' - missing yaml file?");
         }
         if(!isset($this->obj_config->targets->{$this->str_target})) {
-            throw new RuntimeException("Requested deployment target '{$this->str_target}' not present in config");
+            throw new \RuntimeException("Requested deployment target '{$this->str_target}' not present in config");
         }
         $this->verbose("Deployment request valid");
     }
@@ -378,9 +378,9 @@ class AppEngineDeploy
                 $this->arr_env[$str_key] = $str_val;
             }
         } elseif (isset($obj_target->environment_from)) {
-            throw new RuntimeException("Remote environment not supported (yet)");
+            throw new \RuntimeException("Remote environment not supported (yet)");
         } else {
-            throw new RuntimeException("No environment defined for target");
+            throw new \RuntimeException("No environment defined for target");
         }
         // @todo cache environment in git-ignored file .deploy-cache
     }
