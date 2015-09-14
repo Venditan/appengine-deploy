@@ -132,8 +132,6 @@ class AppEngineDeploy
         $this->validateModuleTarget();
         $this->determineVersion();
         $this->loadTargetEnvironment();
-
-        // Build the deploy command
         $str_cmd = $this->buildDeployCommand();
         $this->say($this->coloured(' COMMAND ', 'white', 'blue') . ' ' . $str_cmd, true);
 
@@ -231,7 +229,7 @@ class AppEngineDeploy
         $this->verbose("  File found, trying JSON decode");
         $obj_config = json_decode(file_get_contents($str_file));
         if(!is_object($obj_config)) {
-            throw new \RuntimeException("Could not load valid JSON config from file");
+            throw new \RuntimeException("Could not decode JSON config from file, please check your syntax");
         }
         $this->verbose("  JSON decoded config file OK");
         return $obj_config;
@@ -334,7 +332,7 @@ class AppEngineDeploy
                     if('default' === $this->str_module) {
                         $this->str_module = 'app';
                     }
-                    $this->verbose("Deployment requested for [{$this->str_module}:{$this->str_target}]");
+                    $this->say("Deployment requested for [{$this->str_module}:{$this->str_target}]");
                     return;
                 }
             }
@@ -354,7 +352,7 @@ class AppEngineDeploy
         if(!isset($this->obj_config->targets->{$this->str_target})) {
             throw new \RuntimeException("Requested deployment target '{$this->str_target}' not present in config");
         }
-        $this->verbose("Deployment request valid");
+        $this->verbose("  Deployment request valid");
     }
 
     /**
@@ -394,7 +392,7 @@ class AppEngineDeploy
         $obj_target = $this->getTargetConfig();
 
         // Currently deployed versions
-        $this->say('Looking up deployed versions...');
+        $this->verbose('Looking up deployed versions');
         $arr_deployed_versions = [];
         $str_version_cmd = $this->getAppcfgPath() . " -A {$obj_target->app_id} list_versions 2>&1";
         $this->verbose("  Running version check command: {$str_version_cmd}");
@@ -441,7 +439,7 @@ class AppEngineDeploy
             }
             $this->str_version = $str_version_template;
         }
-        $this->say("Deploying to version: {$this->str_version}");
+        $this->say("Preparing version: {$this->str_version}");
     }
 
     /**
