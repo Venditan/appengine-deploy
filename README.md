@@ -1,8 +1,47 @@
 # App Engine Deploy #
 
-Environment and Deployment Manager for *Google App Engine* Applications
+Environment and Deployment Manager for **Google App Engine** Applications
 
 Working towards this: http://12factor.net/config
+
+## What is this? Is it different from appcfg.py? ##
+
+This allows you to **deploy the same code/application to multiple target environments** (local, multiple different App Engine projects).
+
+Critically, it also allows you to **manage environment variables distinctly for each deployment target**.
+
+This tool uses `appcfg.py` to actually push the deployments out, but it builds a dynamic command, overriding the target application id and environment variables at deploy time.
+
+### Example deploy.json file ###
+
+Deployment targets and environments are configured in `deploy.json`.
+
+Here's a quick example where we have different database credentials for alpha and live environments.
+
+```json
+{
+    "targets": {
+        "alpha": {
+            "app_id": "myapp-alpha",
+            "version": "alpha++",
+            "environment": {
+                "APP_DB_USER": "root",
+                "APP_DB_NAME": "DatabaseName",
+                "APP_DB_SOCKET": "/cloudsql/myapp:instance"
+            }
+        },
+        "live": {
+            "app_id": "myapp",
+            "version": "2",
+            "environment": {
+                "APP_DB_USER": "root",
+                "APP_DB_NAME": "LiveDatabaseName",
+                "APP_DB_SOCKET": "/cloudsql/myapp:instance"
+            }
+        },
+    }
+}
+```
 
 ## Examples ##
 
@@ -51,33 +90,6 @@ You can use either `app` or `default` to deploy the default App Engine module (w
 ## deploy.json ##
 
 You should create `deploy.json` in your project root (you can use the `deploy init` command to create a template file).
-
-Here is an example file:
-
-```json
-{
-    "targets": {
-        "alpha": {
-            "app_id": "myapp-alpha",
-            "version": "alpha++",
-            "environment": {
-                "APP_DB_USER": "root",
-                "APP_DB_NAME": "DatabaseName",
-                "APP_DB_SOCKET": "/cloudsql/myapp:instance"
-            }
-        },
-        "live": {
-            "app_id": "myapp",
-            "version": "2",
-            "environment": {
-                "APP_DB_USER": "root",
-                "APP_DB_NAME": "LiveDatabaseName",
-                "APP_DB_SOCKET": "/cloudsql/myapp:instance"
-            }
-        },
-    }
-}
-```
 
 ### Targets ###
 
