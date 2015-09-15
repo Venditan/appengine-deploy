@@ -118,11 +118,11 @@ So, this might be your deploy file from your application folder:
 In your composer.json require section:
 
 ```json
-"venditan/appengine-deploy": "dev-master"
+"venditan/appengine-deploy": "v1.0.1"
 ```
 
 or with the command line
 
 ```bash
-composer require venditan/appengine-deploy
+composer require venditan/appengine-deploy:v1.0.1
 ```
