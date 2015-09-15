@@ -458,7 +458,7 @@ class AppEngineDeploy
             "-V {$this->str_version}"
         ];
         foreach($this->arr_env as $str_key => $str_val) {
-            $arr_cmd[] = "-E {$str_key}:\"{$str_val}\"";
+            $arr_cmd[] = "-E {$str_key}:\"" . str_replace('"', '\"', $str_val) . "\"";
         }
         return implode(' ', $arr_cmd);
     }
