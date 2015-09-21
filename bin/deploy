@@ -422,7 +422,7 @@ class AppEngineDeploy
             $int_previous_version = 0;
             foreach($arr_deployed_versions as $str_deployed_version) {
                 $arr_matched_version = [];
-                if(preg_match("#alpha(?<number>[0-9]+)$#", $str_deployed_version, $arr_matched_version)) {
+                if(preg_match("#{$str_version_prefix}(?<number>[0-9]+)$#", $str_deployed_version, $arr_matched_version)) {
                     if($arr_matched_version['number'] > $int_previous_version) {
                         $int_previous_version = $arr_matched_version['number'];
                     }
