@@ -398,6 +398,7 @@ class AppEngineDeploy
         $this->verbose("  Running version check command: {$str_version_cmd}");
         $str_version_data = shell_exec($str_version_cmd);
         $arr_modules = explode("\n", $str_version_data);
+        $str_version_compare = ('app' === $this->str_module ? 'default' : $this->str_module);
         foreach($arr_modules as $str_module_version_data) {
             $arr_module_versions = [];
             $bol_match = preg_match('#(?<module>.*): \[(?<versions>.*)\]#', $str_module_version_data, $arr_module_versions);
@@ -405,8 +406,8 @@ class AppEngineDeploy
                 $str_module = $arr_module_versions['module'];
                 $arr_deployed_versions = explode(', ', $arr_module_versions['versions']);
                 $this->verbose("  Module [{$str_module}] has deployed Versions [" . implode(', ', $arr_deployed_versions) . "]");
-                if($str_module === $this->str_module) {
-                    $this->say("  Target module [{$str_module}] has existing deployed versions [" . implode(', ', $arr_deployed_versions) . "]");
+                if($str_module === $str_version_compare) {
+                    $this->say("  Found target module [{$str_module}] - has existing deployed versions [" . implode(', ', $arr_deployed_versions) . "]");
                     break;
                 }
             }
