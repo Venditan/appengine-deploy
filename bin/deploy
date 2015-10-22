@@ -75,16 +75,23 @@ class AppEngineDeploy
     /**
      * Script arguments
      *
+     * @deprecated
      * @var array
      */
     private $arr_args = [];
+
+    /**
+     * Command line options from getopt()
+     *
+     * @var array
+     */
+    private $arr_opt = [];
 
     /**
      * Run the deployment
      */
     public function run()
     {
-        $this->arr_args = (array)$_SERVER['argv'];
         try {
             $this->say('');
             $str_command = $this->evaluateCommand();
@@ -108,10 +115,10 @@ class AppEngineDeploy
             $this->say("Complete");
         } catch (\InvalidArgumentException $obj_ex) {
             $this->say("Expected usage:");
-            $this->say("  deploy [verbose] init");
-            $this->say("  deploy [verbose] targets");
-            $this->say("  deploy [verbose] test module:target");
-            $this->say("  deploy [verbose] run module:target");
+            $this->say("  deploy [-v|--verbose] --init");
+            $this->say("  deploy [-v|--verbose] --targets");
+            $this->say("  deploy [-v|--verbose] --test --module=<module> --target=<target> [--label=<label>]");
+            $this->say("  deploy [-v|--verbose] --run --module=<module> --target=<target> [--label=<label>]");
             $this->say($this->coloured(' FAILED ', 'black', 'red') . ' ' .$obj_ex->getMessage(), true);
         } catch (\Exception $obj_ex) {
             $this->say($this->coloured(' FAILED ', 'black', 'red') . ' ' .$obj_ex->getMessage(), true);
@@ -144,16 +151,105 @@ class AppEngineDeploy
      */
     private function evaluateCommand()
     {
-        $arr_cmd_match = [];
-        $bol_valid = preg_match('#(.*?)(\s(?<verbose>verbose))?\s(?<cmd>.*?)(\s(?<param>.*))?$#', implode(' ', $this->arr_args), $arr_cmd_match);
-        if(!$bol_valid) {
-            throw new \InvalidArgumentException("Invalid command");
-        }
-        if(isset($arr_cmd_match['verbose']) && 'verbose' == $arr_cmd_match['verbose']) {
+        $obj_spec = $this->getCommandSpec();
+        $this->arr_opt = $this->getOpt($obj_spec);
+
+        // Verbose?
+        if(isset($this->arr_opt['v']) || isset($this->arr_opt['verbose'])) {
             $this->bol_verbose = true;
             $this->verbose('Verbose output enabled');
+            $this->verbose(print_r($this->arr_opt, true));
         }
-        return $arr_cmd_match['cmd'];
+
+        // Command?
+        $str_command = '';
+        $int_commands = 0;
+        foreach($obj_spec->commands as $str_cmd) {
+            if(isset($this->arr_opt[$str_cmd])) {
+                $str_command = $str_cmd;
+                $int_commands++;
+            }
+        }
+        if(1 !== $int_commands) {
+            throw new \InvalidArgumentException("You must specify ONE command from: [" . implode(', ', $obj_spec->commands) . "]");
+        }
+
+        // Missing required parameters?
+        $arr_missing_params = [];
+        if(isset($obj_spec->command_param_sets[$str_command])) {
+            foreach($obj_spec->command_param_sets[$str_command]['required'] as $str_req_param) {
+                if(!isset($this->arr_opt[$str_req_param])) {
+                    $arr_missing_params[] = $str_req_param;
+                }
+            }
+            if(count($arr_missing_params) > 0) {
+                throw new \Exception("Required parameters missing for command [{$str_command}]. Missing: [" . implode(', ', $arr_missing_params) . "]");
+            }
+        }
+
+        // Done, return the command
+        return $str_command;
+    }
+
+    /**
+     * Define the command, parameters & flags
+     *
+     * @return object
+     */
+    private function getCommandSpec()
+    {
+        return (object)[
+            'commands' => ['init', 'targets', 'run', 'test'],
+            'command_param_sets' => [
+                'run' => [
+                    'flags' => [],
+                    'required' => ['module', 'target'],
+                    'optional' => ['label']
+                ],
+                'test' => [
+                    'flags' => [],
+                    'required' => ['module', 'target'],
+                    'optional' => ['label']
+                ]
+            ],
+            'script_flags' => ['verbose'],
+            'script_params' => []
+        ];
+    }
+
+    /**
+     * Run the getopt() function, based on the command spec input
+     *
+     * @param $obj_spec
+     * @return array
+     */
+    private function getOpt($obj_spec)
+    {
+        $str_short_opts = '';
+        $arr_long_opts = [];
+        foreach($obj_spec->commands as $str_cmd) {
+            $arr_long_opts[] = $str_cmd;
+        }
+        foreach($obj_spec->script_flags as $str_flag) {
+            $arr_long_opts[] = $str_flag;
+            $str_short_opts .= $str_flag[0];
+        }
+        foreach($obj_spec->script_params as $str_param) {
+            $arr_long_opts[] = $str_param . ':';
+        }
+        $arr_unique_cmd_params = [];
+        foreach($obj_spec->command_param_sets as $str_cmd => $arr_cmd_params) {
+            foreach($arr_cmd_params['required'] as $str_req_param) {
+                $arr_unique_cmd_params[$str_req_param] = $str_req_param;
+            }
+            foreach($arr_cmd_params['optional'] as $str_opt_param) {
+                $arr_unique_cmd_params[$str_opt_param] = $str_opt_param;
+            }
+        }
+        foreach($arr_unique_cmd_params as $str_cmd_param) {
+            $arr_long_opts[] = $str_cmd_param . ':';
+        }
+        return getopt($str_short_opts, $arr_long_opts);
     }
 
     /**
@@ -317,27 +413,21 @@ class AppEngineDeploy
 
     /**
      * Which module? (e.g. app.yaml)
-     * Where to? (which target environment - alpha/beta/staging/live) - consider JSON config
      *
-     * @todo Update & use the regex in evaluateCommand() to extract module and target
+     * Where to? (which target environment - alpha/beta/staging/live) - consider JSON config
      */
     private function determineModuleTarget()
     {
-        foreach($this->arr_args as $str_arg) {
-            if(strpos($str_arg, ':')) {
-                $arr_cmd = explode(':', $str_arg);
-                if(2 == count($arr_cmd)) {
-                    $this->str_module = $arr_cmd[0];
-                    $this->str_target = $arr_cmd[1];
-                    if('default' === $this->str_module) {
-                        $this->str_module = 'app';
-                    }
-                    $this->say("Deployment requested for [{$this->str_module}:{$this->str_target}]");
-                    return;
-                }
+        if(isset($this->arr_opt['module']) && isset($this->arr_opt['target'])) {
+            $this->str_module = $this->arr_opt['module'];
+            $this->str_target = $this->arr_opt['target'];
+            if('default' === $this->str_module) {
+                $this->str_module = 'app';
             }
+            $this->say("Deployment requested for [{$this->str_module}:{$this->str_target}]");
+        } else {
+            throw new \RuntimeException("Could not determine module & target");
         }
-        throw new \RuntimeException("Could not determine module:target. Expected usage: 'deploy <module>:<target>'");
     }
 
     /**
@@ -476,7 +566,12 @@ class AppEngineDeploy
      */
     private function deploy($str_cmd)
     {
-        passthru($str_cmd);
+        $str_confirm = readline("Execute the deployment command? (yes|no) : ");
+        if('yes' == strtolower($str_confirm)) {
+            passthru($str_cmd);
+        } else {
+            $this->say("Deployment cancelled");
+        }
     }
 
     /**
