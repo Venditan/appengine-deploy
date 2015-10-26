@@ -202,7 +202,7 @@ class AppEngineDeploy
             'commands' => ['init', 'targets', 'run', 'test'],
             'command_param_sets' => [
                 'run' => [
-                    'flags' => [],
+                    'flags' => ['force'],
                     'required' => ['module', 'target'],
                     'optional' => ['label']
                 ],
@@ -244,6 +244,10 @@ class AppEngineDeploy
             }
             foreach($arr_cmd_params['optional'] as $str_opt_param) {
                 $arr_unique_cmd_params[$str_opt_param] = $str_opt_param;
+            }
+            foreach($arr_cmd_params['flags'] as $str_cmd_flag) {
+                $arr_long_opts[] = $str_cmd_flag;
+                $str_short_opts .= $str_cmd_flag[0];
             }
         }
         foreach($arr_unique_cmd_params as $str_cmd_param) {
@@ -574,15 +578,22 @@ class AppEngineDeploy
      *
      * Optionally run appcfg.py ...
      *
-     * @todo Probably need a -y or -f type flag
      * @todo Consider logging of deployments
      *
      * @param $str_cmd
      */
     private function deploy($str_cmd)
     {
-        $str_confirm = readline("Execute the deployment command? (yes|no) : ");
-        if('yes' == strtolower($str_confirm)) {
+        $bol_deploy = false;
+        if(isset($this->arr_opt['f']) || isset($this->arr_opt['force'])) {
+            $bol_deploy = true;
+        } else {
+            $str_confirm = readline("Execute the deployment command? YOU SHOULD READ IT CAREFULLY (yes|no) : ");
+            if('yes' == trim(strtolower($str_confirm))) {
+                $bol_deploy = true;
+            }
+        }
+        if(true === $bol_deploy) {
             passthru($str_cmd);
         } else {
             $this->say("Deployment cancelled");
