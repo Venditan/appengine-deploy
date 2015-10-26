@@ -481,7 +481,7 @@ class AppEngineDeploy
     {
         $obj_target = $this->getTargetConfig();
 
-        $str_label = '';
+        $str_label = null;
         if(isset($this->arr_opt['label'])) {
             if(preg_match("/^[a-z0-9_]+$/", $this->arr_opt['label'])) {
                 $str_label = $this->arr_opt['label'];
@@ -541,8 +541,9 @@ class AppEngineDeploy
         }
 
         // Add any label suffix
-        $this->str_version .= '-' . $str_label;
-
+        if(null !== $str_label) {
+            $this->str_version .= '-' . $str_label;
+        }
 
         $this->say("Preparing version: {$this->str_version}");
     }
