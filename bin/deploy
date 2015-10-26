@@ -481,6 +481,15 @@ class AppEngineDeploy
     {
         $obj_target = $this->getTargetConfig();
 
+        $str_label = '';
+        if(isset($this->arr_opt['label'])) {
+            if(preg_match("/^[a-z0-9_]+$/", $this->arr_opt['label'])) {
+                $str_label = $this->arr_opt['label'];
+            } else {
+                throw new \InvalidArgumentException("Supplied label \"{$this->arr_opt['label']}\" does not match the required format: [a-z0-9_]+");
+            }
+        }
+
         // Currently deployed versions
         $this->verbose('Looking up deployed versions');
         $arr_deployed_versions = [];
@@ -513,7 +522,7 @@ class AppEngineDeploy
             $int_previous_version = 0;
             foreach($arr_deployed_versions as $str_deployed_version) {
                 $arr_matched_version = [];
-                if(preg_match("#{$str_version_prefix}(?<number>[0-9]+)$#", $str_deployed_version, $arr_matched_version)) {
+                if(preg_match("#{$str_version_prefix}(?<number>[0-9]+)(\-(?<label>[a-zA-Z0-9_]+))?$#", $str_deployed_version, $arr_matched_version)) {
                     if($arr_matched_version['number'] > $int_previous_version) {
                         $int_previous_version = $arr_matched_version['number'];
                     }
@@ -530,6 +539,11 @@ class AppEngineDeploy
             }
             $this->str_version = $str_version_template;
         }
+
+        // Add any label suffix
+        $this->str_version .= '-' . $str_label;
+
+
         $this->say("Preparing version: {$this->str_version}");
     }
 
@@ -559,7 +573,7 @@ class AppEngineDeploy
      *
      * Optionally run appcfg.py ...
      *
-     * @todo Probably need a prompt or -y type flag
+     * @todo Probably need a -y or -f type flag
      * @todo Consider logging of deployments
      *
      * @param $str_cmd
