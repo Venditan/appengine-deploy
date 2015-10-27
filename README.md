@@ -62,25 +62,25 @@ For example, from your project root:
 Deploy the **examples** module to the **alpha** target environment
 
 ```bash
-vendor/bin/deploy run examples:alpha
+vendor/bin/deploy --run --module=examples --target=alpha
 ```
 
 Create a template **deploy.json** file
 
 ```bash
-vendor/bin/deploy init
+vendor/bin/deploy --init
 ```
 
 Show the planned `appcfg.py` command for a deployment, but do not run it
 
 ```bash
-vendor/bin/deploy test default:live
+vendor/bin/deploy --test --module=default --target=live
 ```
 
 List the configured deployment targets
 
 ```bash
-vendor/bin/deploy [verbose] targets
+vendor/bin/deploy --verbose targets
 ```
 
 ### Default Module ###
@@ -100,6 +100,18 @@ If you suffix your version name with `++` then we will auto-increment the versio
 In the example above, the first deployment gets `alpha1` and the second `alpha2` and so on.
 
 In order to do this, we have to be able to detect what versions are already running. So, if you delete all your versions, we will start at 1 again.
+
+### Labels ###
+
+You can supply a version label like this:
+
+```bash
+vendor/bin/deploy --run --module=examples --target=alpha --label=rel200
+```
+
+When the code is deployed, the label will be suffixed to the version number. So, for example if the version is "alpha3":
+
+`alpha3-rel200`
 
 ## Code Separation, Redirects ##
 
