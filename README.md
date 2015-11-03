@@ -113,6 +113,8 @@ When the code is deployed, the label will be suffixed to the version number. So,
 
 `alpha3-rel200`
 
+**Important** Labels must match the following regex: `[a-zA-Z0-9_]+` (one or more alphanumerics or underscores)
+
 ## Code Separation, Redirects ##
 
 You can "redirect" from your `deploy.json` file to another, usually intended for situations where your environment configurations are stored in another version control repository.
