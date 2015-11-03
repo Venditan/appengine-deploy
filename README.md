@@ -1,8 +1,18 @@
 # App Engine Deploy #
 
-Environment and Deployment Manager for **Google App Engine** Applications
+Environment and Deployment Manager for **Google App Engine** Applications.
+
+Supports multiple modules and multiple deployment targets (i.e. deploy to multiple unique appid's).
 
 Working towards this: http://12factor.net/config
+
+## Table of Contents ##
+
+- [Example deploy.json](#example-deployjson-file)
+- [Command Line](#usage)
+- [Labels](#labels)
+- [Installing with Composer](#installing-this-tool)
+- [Code Separation](#code-separation-redirects)
 
 ## What is this? Is it different from appcfg.py? ##
 
