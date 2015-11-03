@@ -1,0 +1,11 @@
+{
+    "targets": {
+        "example": {
+            "app_id": "your-app-id",
+            "version": "version++",
+            "environment": {
+                "EXAMPLE": "VALUE"
+            }
+        }
+    }
+}
