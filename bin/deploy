@@ -214,7 +214,7 @@ class AppEngineDeploy
                     'optional' => ['label']
                 ],
                 'test' => [
-                    'flags' => [],
+                    'flags' => ['use-dotenv'],
                     'required' => ['module', 'target'],
                     'optional' => ['label']
                 ]
