@@ -283,7 +283,7 @@ class AppEngineDeploy
      */
     private function getBaseDir()
     {
-        return $_SERVER['PWD'];
+        return getcwd();
     }
 
     /**
@@ -588,6 +588,9 @@ class AppEngineDeploy
         if(isset($this->arr_opt['f']) || isset($this->arr_opt['force'])) {
             $bol_deploy = true;
         } else {
+            if(!function_exists('readline')) {
+                throw new \InvalidArgumentException('Cannot use php `readline` function. To deploy please re-run the command but additionally pass a --force parameter.');
+            }
             $str_confirm = readline("Execute the deployment command? YOU SHOULD READ IT CAREFULLY (yes|no) : ");
             if('yes' == trim(strtolower($str_confirm))) {
                 $bol_deploy = true;
