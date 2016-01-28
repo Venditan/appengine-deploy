@@ -587,11 +587,13 @@ class AppEngineDeploy
         $bol_deploy = false;
         if(isset($this->arr_opt['f']) || isset($this->arr_opt['force'])) {
             $bol_deploy = true;
-        } else {
+        } elseif (function_exists('readline')) {
             $str_confirm = readline("Execute the deployment command? YOU SHOULD READ IT CAREFULLY (yes|no) : ");
             if('yes' == trim(strtolower($str_confirm))) {
                 $bol_deploy = true;
             }
+        } else {
+            $this->say('Cannot use `readline`. To deploy please re-run the command and pass a --force parameter.');
         }
         if(true === $bol_deploy) {
             passthru($str_cmd);
