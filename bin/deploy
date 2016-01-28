@@ -283,7 +283,7 @@ class AppEngineDeploy
      */
     private function getBaseDir()
     {
-        return $_SERVER['PWD'];
+        return getcwd();
     }
 
     /**
