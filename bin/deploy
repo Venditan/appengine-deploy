@@ -73,14 +73,6 @@ class AppEngineDeploy
     private $arr_env = [];
 
     /**
-     * Script arguments
-     *
-     * @deprecated
-     * @var array
-     */
-    private $arr_args = [];
-
-    /**
      * Command line options from getopt()
      *
      * @var array
@@ -361,7 +353,6 @@ class AppEngineDeploy
     /**
      * List the configured targets
      *
-     * @return bool
      */
     private function targetsRequest()
     {
@@ -381,7 +372,6 @@ class AppEngineDeploy
      *
      * If so, process and return true
      *
-     * @return bool
      */
     private function initRequest()
     {
@@ -487,10 +477,10 @@ class AppEngineDeploy
 
         $str_label = null;
         if(isset($this->arr_opt['label'])) {
-            if(preg_match("/^[a-z0-9_]+$/", $this->arr_opt['label'])) {
+            if(preg_match('/^(?:^(?!-)[a-z\d\-]{0,62}[a-z\d]$)$/', $this->arr_opt['label'])) {
                 $str_label = $this->arr_opt['label'];
             } else {
-                throw new \InvalidArgumentException("Supplied label \"{$this->arr_opt['label']}\" does not match the required format: [a-z0-9_]+");
+                throw new \InvalidArgumentException("Supplied label \"{$this->arr_opt['label']}\" does not match the required format: ^(?:^(?!-)[a-z\d\-]{0,62}[a-z\d]$)$");
             }
         }
 
