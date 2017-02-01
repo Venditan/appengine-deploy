@@ -130,6 +130,13 @@ class AppEngineDeploy
         $this->determineModuleTarget();
         $this->validateModuleTarget();
         $this->determineVersion();
+        if(isset($this->arr_opt['use-dotenv']) && file_exists($this->getBaseDir() . DIRECTORY_SEPARATOR . '.env')) {
+            $arr_dot_env_file_contents = explode(PHP_EOL, file_get_contents($this->getBaseDir() . DIRECTORY_SEPARATOR . '.env'));
+            foreach($arr_dot_env_file_contents as $str_line) {
+                list($str_key, $str_val) = explode('=', $str_line);
+                $this->arr_env[$str_key] = $str_val;
+            }
+        }
         $this->loadTargetEnvironment();
         $str_cmd = $this->buildDeployCommand();
         $this->say($this->coloured(' COMMAND ', 'white', 'blue') . ' ' . $str_cmd, true);
@@ -194,12 +201,12 @@ class AppEngineDeploy
             'commands' => ['init', 'targets', 'run', 'test'],
             'command_param_sets' => [
                 'run' => [
-                    'flags' => ['force'],
+                    'flags' => ['force', 'use-dotenv'],
                     'required' => ['module', 'target'],
                     'optional' => ['label']
                 ],
                 'test' => [
-                    'flags' => [],
+                    'flags' => ['use-dotenv'],
                     'required' => ['module', 'target'],
                     'optional' => ['label']
                 ]
