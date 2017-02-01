@@ -350,6 +350,13 @@ class AppEngineDeploy
             if(!isset($obj_target->app_id)) {
                 throw new \RuntimeException("No app_id defined for deployment target: {$str_target}");
             }
+            if (
+                    isset($obj_target->require_label)
+                    && $obj_target->require_label === true
+                    && !isset($this->arr_opt['label'])
+            ) {
+                throw new \RuntimeException("The --label argument is required for deployment target: {$str_target}");
+            }
             $int_targets++;
         }
         if($int_targets < 1) {
@@ -402,6 +409,7 @@ class AppEngineDeploy
                 "example" => (object)[
                     "app_id" => $str_app,
                     "version" => "version++",
+                    "require_label" => false,
                     "environment" => (object)[
                         "EXAMPLE" => "VALUE"
                     ]
