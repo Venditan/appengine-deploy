@@ -355,7 +355,7 @@ class AppEngineDeploy
                     && $obj_target->require_label === true
                     && !isset($this->arr_opt['label'])
             ) {
-                throw new \RuntimeException("The --label argument is required to deploy target: {$str_target}");
+                throw new \RuntimeException("The --label argument is required for deployment target: {$str_target}");
             }
             $int_targets++;
         }
