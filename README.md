@@ -34,6 +34,7 @@ Here's a quick example where we have different database credentials for alpha an
         "alpha": {
             "app_id": "myapp-alpha",
             "version": "alpha++",
+            "require_label": false,
             "environment": {
                 "APP_DB_USER": "root",
                 "APP_DB_NAME": "DatabaseName",
@@ -43,12 +44,13 @@ Here's a quick example where we have different database credentials for alpha an
         "live": {
             "app_id": "myapp",
             "version": "2",
+            "require_label": true,
             "environment": {
                 "APP_DB_USER": "root",
                 "APP_DB_NAME": "LiveDatabaseName",
                 "APP_DB_SOCKET": "/cloudsql/myapp:instance"
             }
-        },
+        }
     }
 }
 ```
@@ -123,6 +125,9 @@ When the code is deployed, the label will be suffixed to the version number. So,
 
 `alpha3-rel200`
 
+If your configuration defines "require_label" as true, when you deploy to that target, you will be required to enter a
+label. This is particularly useful for production environments, for managing feature releases, etc.
+
 **Important** Labels must match the following regex: `[a-zA-Z0-9_]+` (one or more alphanumerics or underscores)
 
 ## Code Separation, Redirects ##
@@ -142,7 +147,9 @@ So, this might be your deploy file from your application folder:
 In your composer.json require section:
 
 ```json
-"venditan/appengine-deploy": "1.1.*"
+{
+  "venditan/appengine-deploy": "1.1.*"
+}
 ```
 
 or with the command line
