@@ -80,6 +80,13 @@ class AppEngineDeploy
     private $arr_opt = [];
 
     /**
+     * Module YAML file contents
+     *
+     * @var string
+     */
+    private $str_original_app_yaml = [];
+
+    /**
      * Run the deployment
      */
     public function run()
@@ -126,16 +133,22 @@ class AppEngineDeploy
     {
         $this->loadConfig();
         $this->validateConfig();
-        $this->validateAppcfg();
+        $this->validateGCloud();
         $this->determineModuleTarget();
         $this->validateModuleTarget();
         $this->determineVersion();
         $this->loadTargetEnvironment();
+        $this->writeTempEnvYaml();
+        $this->writeTempApplicationYaml();
         $str_cmd = $this->buildDeployCommand();
         $this->say($this->coloured(' COMMAND ', 'white', 'blue') . ' ' . $str_cmd, true);
 
         // Optionally do the deployment (run the command)
-        $bol_execute && $this->deploy($str_cmd);
+        if($bol_execute) {
+            $this->deploy($str_cmd);
+            $this->removeTempEnvYaml();
+            $this->removeTempApplicationYaml();
+        }
     }
 
     /**
@@ -249,13 +262,13 @@ class AppEngineDeploy
     }
 
     /**
-     * One day allow optional configuration of where appcfg.py is
+     * How should we run 'gcloud'?
      *
      * @return string
      */
-    private function getAppcfgPath()
+    private function getGCloudPath()
     {
-        return 'appcfg.py';
+        return 'gcloud';
     }
 
     /**
@@ -266,6 +279,26 @@ class AppEngineDeploy
     private function getConfigFilename()
     {
         return $this->getBaseDir() . '/deploy.json';
+    }
+
+    /**
+     * Where should the temporary ENV yaml file go?
+     *
+     * @return string
+     */
+    private function getTempEnvYamlFilename()
+    {
+        return $this->getBaseDir() . '/.build-env-tmp.yaml';
+    }
+
+    /**
+     * Where should the temporary APPLICATION yaml file go?
+     *
+     * @return string
+     */
+    private function getTempAppYamlFilename()
+    {
+        return $this->getBaseDir() . '/.build-app-tmp.yaml';
     }
 
     /**
@@ -281,14 +314,14 @@ class AppEngineDeploy
     /**
      * Ensure we can talk to appcfg.py
      */
-    private function validateAppcfg()
+    private function validateGCloud()
     {
-        $this->verbose("Checking appcfg.py");
-        $str_help_output = shell_exec($this->getAppcfgPath() . ' help update 2>&1');
-        if(false === strpos($str_help_output, '-A APP_ID')) {
-            throw new \RuntimeException("Could not validate 'appcfg.py' - is it in your PATH?");
+        $this->verbose("Checking for gcloud");
+        $str_info_output = shell_exec($this->getGCloudPath() . ' info');
+        if(false === strpos($str_info_output, 'Google Cloud SDK')) {
+            throw new \RuntimeException("Could not validate 'gcloud' - is it in your PATH?");
         }
-        $this->verbose("  appcfg.py OK");
+        $this->verbose("  gcloud OK");
     }
 
     /**
@@ -384,6 +417,11 @@ class AppEngineDeploy
     private function initRequest()
     {
         $this->verbose("Running init");
+
+        $this->verbose("  Writing .env.blank.yaml");
+        $int_blank_bytes = file_put_contents($this->getBaseDir() . '/.env.blank.yaml', ' ');
+        $this->say(' ' . $int_blank_bytes . ' bytes written to placeholder yaml file', true);
+
         if(file_exists($this->getConfigFilename())) {
             throw new \RuntimeException("Deployment configuration file already exists (deploy.json).");
         }
@@ -445,6 +483,10 @@ class AppEngineDeploy
         if(!isset($this->obj_config->targets->{$this->str_target})) {
             throw new \RuntimeException("Requested deployment target '{$this->str_target}' not present in config");
         }
+        $this->str_original_app_yaml = file_get_contents($str_module_filename);
+        if(false === strpos($this->str_original_app_yaml, '.env.blank.yaml')) {
+            throw new \RuntimeException("Module yaml file ({$this->str_module}.yaml)  does not contain '.env.blank.yaml' include directive");
+        }
         $this->verbose("  Deployment request valid");
     }
 
@@ -496,24 +538,17 @@ class AppEngineDeploy
         // Currently deployed versions
         $this->verbose('Looking up deployed versions');
         $arr_deployed_versions = [];
-        $str_version_cmd = $this->getAppcfgPath() . " -A {$obj_target->app_id} list_versions 2>&1";
+        $str_version_cmd = $this->getGCloudPath() . " app versions list --project={$obj_target->app_id} --format=json";
         $this->verbose("  Running version check command: {$str_version_cmd}");
-        $str_version_data = shell_exec($str_version_cmd);
-        $arr_modules = explode("\n", $str_version_data);
+        $str_version_response = shell_exec($str_version_cmd);
+        $arr_versions = json_decode($str_version_response);
         $str_version_compare = ('app' === $this->str_module ? 'default' : $this->str_module);
-        foreach($arr_modules as $str_module_version_data) {
-            $arr_module_versions = [];
-            $bol_match = preg_match('#(?<module>.*): \[(?<versions>.*)\]#', $str_module_version_data, $arr_module_versions);
-            if($bol_match) {
-                $str_module = $arr_module_versions['module'];
-                $arr_deployed_versions = explode(', ', $arr_module_versions['versions']);
-                $this->verbose("  Module [{$str_module}] has deployed Versions [" . implode(', ', $arr_deployed_versions) . "]");
-                if($str_module === $str_version_compare) {
-                    $this->say("  Found target module [{$str_module}] - has existing deployed versions [" . implode(', ', $arr_deployed_versions) . "]");
-                    break;
-                }
+        foreach($arr_versions as $obj_version) {
+            if($obj_version->service == $str_version_compare) {
+                $arr_deployed_versions[] = $obj_version->id;
             }
         }
+        $this->say("  Found target module [{$str_version_compare}] - has existing deployed versions [" . implode(', ', $arr_deployed_versions) . "]");
 
         // Requested version
         $str_version_template = isset($obj_target->version) ? $obj_target->version : 'deploy++';
@@ -560,15 +595,15 @@ class AppEngineDeploy
     {
         $obj_target = $this->getTargetConfig();
         $arr_cmd = [
-            $this->getAppcfgPath(),
-            'update',
-            "{$this->str_module}.yaml",
-            "-A {$obj_target->app_id}",
-            "-V {$this->str_version}"
+            $this->getGCloudPath(),
+            'app',
+            'deploy',
+            $this->getTempAppYamlFilename(),
+            "--project={$obj_target->app_id}",
+            "--version={$this->str_version}",
+            "--no-promote",
+            "--format=json"
         ];
-        foreach($this->arr_env as $str_key => $str_val) {
-            $arr_cmd[] = "-E {$str_key}:\"" . str_replace('"', '\"', $str_val) . "\"";
-        }
         return implode(' ', $arr_cmd);
     }
 
@@ -584,8 +619,10 @@ class AppEngineDeploy
     private function deploy($str_cmd)
     {
         $bol_deploy = false;
+        $bol_force = false;
         if(isset($this->arr_opt['f']) || isset($this->arr_opt['force'])) {
             $bol_deploy = true;
+            $bol_force = true;
         } else {
             if(!function_exists('readline')) {
                 throw new \InvalidArgumentException('Cannot use php `readline` function. To deploy please re-run the command but additionally pass a --force parameter.');
@@ -596,6 +633,9 @@ class AppEngineDeploy
             }
         }
         if(true === $bol_deploy) {
+            if($bol_force) {
+                $str_cmd .= ' --quiet';
+            }
             passthru($str_cmd);
         } else {
             $this->say("Deployment cancelled");
@@ -638,6 +678,50 @@ class AppEngineDeploy
         $str_bg_start = '[4' . (isset($arr_colours[$str_bg_colour]) ? $arr_colours[$str_bg_colour] : '1') . 'm';
         $str_fg_start = '[3' . (isset($arr_colours[$str_fg_colour]) ? $arr_colours[$str_fg_colour] : '1') . 'm';
         return chr(27) . $str_bg_start . chr(27) . $str_fg_start . $str . chr(27) . '[0m';
+    }
+
+    /**
+     * Nasty YAML parser
+     */
+    private function writeTempApplicationYaml()
+    {
+        $this->verbose("Writing temporary application yaml file");
+        $int_bytes = file_put_contents($this->getTempAppYamlFilename(), str_replace('.env.blank.yaml', $this->getTempEnvYamlFilename(), $this->str_original_app_yaml));
+        $this->verbose("  Wrote {$int_bytes} bytes to temp ENV yaml file");
+    }
+
+    /**
+     * Write a temporary YAML file with the environment data
+     */
+    private function writeTempEnvYaml()
+    {
+        $arr_lines = [
+            '# Auto-generated ENV file',
+            '# ' . date('r'),
+            'env_variables:',
+        ];
+        foreach ($this->arr_env as $str_key => $mix_value) {
+            $arr_lines[] = '  ' . $str_key . ': ' . $mix_value;
+        }
+        $this->verbose("Writing " . count($this->arr_env) . " value(s) to temp ENV yaml file");
+        $int_bytes = file_put_contents($this->getTempEnvYamlFilename(), implode("\n", $arr_lines));
+        $this->verbose("  Wrote {$int_bytes} bytes to temp ENV yaml file");
+    }
+
+    /**
+     * Remove the temporary environment file
+     */
+    private function removeTempEnvYaml()
+    {
+        unlink($this->getTempEnvYamlFilename());
+    }
+
+    /**
+     * Remove the temporary application file
+     */
+    private function removeTempApplicationYaml()
+    {
+        unlink($this->getTempAppYamlFilename());
     }
 
 }
