@@ -14,13 +14,15 @@ Working towards this: http://12factor.net/config
 - [Installing with Composer](#installing-this-tool)
 - [Code Separation](#code-separation-redirects)
 
-## What is this? Is it different from appcfg.py? ##
+## What is this? Is it different from appcfg.py / gcloud? ##
 
 This allows you to **deploy the same code/application to multiple target environments** (local, multiple different App Engine projects).
 
 Critically, it also allows you to **manage environment variables distinctly for each deployment target**.
 
-This tool uses `appcfg.py` to actually push the deployments out, but it builds a dynamic command, overriding the target application id and environment variables at deploy time.
+This tool uses `gcloud` command line tool to actually push the deployments out.
+
+It builds temporary application yaml file and environment yaml file at deploy time.
 
 ### Example deploy.json file ###
 
@@ -55,6 +57,22 @@ Here's a quick example where we have different database credentials for alpha an
 }
 ```
 
+### Required: yaml include placeholder ###
+
+To avoid a full-blown yaml parser, please ensure you have the following include line in your module yaml file:
+
+```yaml
+- .env.blank.yaml
+```
+
+It should come AFTER any other includes you have, to ensure we can overwrite environment variables at deploy time.
+
+```yaml
+includes:
+- .env.yaml
+- .env.blank.yaml
+```
+
 ### Local development environment ###
 
 You can configure the environment variables for your local development server in your yaml files like this:
@@ -83,7 +101,7 @@ Create a template **deploy.json** file
 vendor/bin/deploy --init
 ```
 
-Show the planned `appcfg.py` command for a deployment, but do not run it
+Show the planned `gcloud` command for a deployment, but do not run it
 
 ```bash
 vendor/bin/deploy --test --module=default --target=live
